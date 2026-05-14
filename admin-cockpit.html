@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Cockpit Admin - Mes Bes Extrêmes</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --bg: #0a0e17;
+            --surface: #151b28;
+            --border: #2a3344;
+            --gold: #e6b800;
+            --accent: #d4a017;
+            --text: #f0f3f8;
+            --muted: #8a94a6;
+            --success: #2d8a4e;
+            --warning: #e67e22;
+            --danger: #c0392b;
+            --info: #2a6f97;
+            --shadow: 0 4px 24px rgba(0,0,0,0.3);
+            --radius: 10px;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; line-height:1.5; }
+        ::-webkit-scrollbar { width:6px; } ::-webkit-scrollbar-track { background:var(--bg); } ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+        
+        /* LAYOUT */
+        .admin-layout { display:grid; grid-template-columns:260px 1fr; min-height:100vh; }
+        .sidebar { background:var(--surface); border-right:1px solid var(--border); padding:1.5rem 1rem; display:flex; flex-direction:column; gap:0.5rem; }
+        .sidebar-logo { text-align:center; padding:1rem 0; border-bottom:1px solid var(--border); margin-bottom:1rem; }
+        .sidebar-logo h2 { background:linear-gradient(135deg,var(--gold),#fcd34d); -webkit-background-clip:text; -webkit-text-fill-color:transparent; font-size:1.3rem; }
+        .sidebar-nav { display:flex; flex-direction:column; gap:0.25rem; }
+        .sidebar-link { display:flex; align-items:center; gap:0.75rem; padding:0.75rem 1rem; border-radius:var(--radius); color:var(--muted); cursor:pointer; transition:all 0.2s; font-size:0.9rem; text-decoration:none; border:none; background:none; width:100%; text-align:left; }
+        .sidebar-link:hover { background:rgba(212,160,23,0.1); color:var(--text); }
+        .sidebar-link.active { background:var(--accent); color:var(--bg); font-weight:600; }
+        .sidebar-link i { width:20px; text-align:center; }
+        .sidebar-footer { margin-top:auto; border-top:1px solid var(--border); padding-top:1rem; }
+        
+        .main-content { padding:1.5rem 2rem; overflow-y:auto; max-height:100vh; }
+        .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem; }
+        .page-header h1 { font-size:1.75rem; color:var(--gold); }
+        .page-header .user-badge { display:flex; align-items:center; gap:0.75rem; background:var(--surface); padding:0.5rem 1rem; border-radius:var(--radius); border:1px solid var(--border); }
+        .user-badge .avatar { width:35px; height:35px; background:var(--accent); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; color:var(--bg); }
+        
+        .tab-content { display:none; } .tab-content.active { display:block; }
+        
+        /* CARDS & STATS */
+        .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1rem; margin-bottom:1.5rem; }
+        .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1.25rem; }
+        .stat-card .stat-icon { font-size:1.5rem; color:var(--gold); margin-bottom:0.5rem; }
+        .stat-card .stat-value { font-size:1.75rem; font-weight:700; color:var(--gold); }
+        .stat-card .stat-label { font-size:0.75rem; color:var(--muted); text-transform:uppercase; }
+        
+        .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1.5rem; margin-bottom:1.5rem; }
+        .card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem; }
+        .card-header h3 { color:var(--gold); font-size:1.1rem; display:flex; align-items:center; gap:0.5rem; }
+        
+        /* TABLE */
+        .table-wrapper { overflow-x:auto; border-radius:var(--radius); border:1px solid var(--border); }
+        table { width:100%; border-collapse:collapse; min-width:700px; }
+        th { background:var(--bg); padding:0.75rem 1rem; font-size:0.7rem; font-weight:600; color:var(--gold); text-transform:uppercase; text-align:left; }
+        td { padding:0.75rem 1rem; border-bottom:1px solid var(--border); font-size:0.85rem; }
+        tr:hover { background:rgba(212,160,23,0.03); }
+        
+        /* BUTTONS */
+        .btn { padding:0.5rem 1rem; border:none; border-radius:6px; cursor:pointer; font-weight:500; font-size:0.8rem; display:inline-flex; align-items:center; gap:0.5rem; transition:all 0.2s; }
+        .btn-primary { background:var(--accent); color:var(--bg); } .btn-primary:hover { background:var(--gold); }
+        .btn-success { background:var(--success); color:white; } .btn-success:hover { opacity:0.9; }
+        .btn-danger { background:var(--danger); color:white; } .btn-danger:hover { opacity:0.9; }
+        .btn-info { background:var(--info); color:white; } .btn-info:hover { opacity:0.9; }
+        .btn-warning { background:var(--warning); color:white; } .btn-warning:hover { opacity:0.9; }
+        .btn-outline { background:transparent; border:1px solid var(--border); color:var(--text); } .btn-outline:hover { border-color:var(--accent); }
+        .btn-sm { padding:0.35rem 0.75rem; font-size:0.7rem; }
+        .btn-lg { padding:0.75rem 1.5rem; font-size:1rem; }
+        
+        /* BADGES */
+        .badge { padding:0.2rem 0.6rem; border-radius:12px; font-size:0.65rem; font-weight:600; }
+        .badge-success { background:rgba(45,138,78,0.2); color:var(--success); }
+        .badge-danger { background:rgba(192,57,43,0.2); color:var(--danger); }
+        .badge-warning { background:rgba(230,126,34,0.2); color:var(--warning); }
+        .badge-info { background:rgba(42,111,151,0.2); color:var(--info); }
+        .badge-gold { background:rgba(212,160,23,0.2); color:var(--gold); }
+        
+        /* FORMS */
+        .form-group { margin-bottom:1rem; }
+        .form-group label { display:block; margin-bottom:0.3rem; font-size:0.75rem; color:var(--muted); text-transform:uppercase; }
+        .form-group input,.form-group select,.form-group textarea { width:100%; padding:0.6rem 0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font-size:0.85rem; outline:none; }
+        .form-group input:focus,.form-group select:focus,.form-group textarea:focus { border-color:var(--accent); }
+        .form-row { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+        
+        /* MODALS */
+        .modal-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(6px); z-index:1000; align-items:center; justify-content:center; padding:1rem; }
+        .modal-overlay.active { display:flex; }
+        .modal { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:2rem; width:100%; max-width:600px; max-height:85vh; overflow-y:auto; animation:slideUp 0.3s ease; }
+        .modal.large { max-width:900px; }
+        @keyframes slideUp { from{opacity:0;transform:translateY(20px);} to{opacity:1;transform:translateY(0);} }
+        .modal h3 { color:var(--gold); margin-bottom:1.5rem; }
+        .modal-actions { display:flex; gap:0.75rem; margin-top:1.5rem; justify-content:flex-end; }
+        
+        /* TOAST */
+        .toast-container { position:fixed; bottom:1.5rem; right:1.5rem; z-index:2000; }
+        .toast { background:var(--surface); border-left:4px solid var(--success); padding:1rem 1.5rem; margin-bottom:0.5rem; border-radius:6px; box-shadow:var(--shadow); animation:slideIn 0.3s; }
+        @keyframes slideIn { from{transform:translateX(100%);opacity:0;} to{transform:translateX(0);opacity:1;} }
+        
+        /* SEARCH BAR */
+        .search-bar { display:flex; gap:0.75rem; margin-bottom:1rem; flex-wrap:wrap; }
+        .search-bar input { flex:1; min-width:200px; padding:0.6rem 0.8rem; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); }
+        
+        /* LOGIN PAGE */
+        .login-container { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:2rem; }
+        .login-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:2.5rem; width:100%; max-width:420px; box-shadow:var(--shadow); }
+        .login-card h2 { color:var(--gold); text-align:center; margin-bottom:2rem; font-size:1.5rem; }
+        
+        /* RESPONSIVE */
+        @media (max-width:768px) {
+            .admin-layout { grid-template-columns:1fr; }
+            .sidebar { display:none; }
+            .sidebar.mobile-open { display:flex; position:fixed; top:0; left:0; bottom:0; z-index:500; width:260px; }
+            .form-row { grid-template-columns:1fr; }
+            .main-content { padding:1rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- PAGE DE CONNEXION ADMIN -->
+<div id="adminLoginPage" class="login-container">
+    <div class="login-card">
+        <h2><i class="fas fa-crown"></i> Cockpit Admin</h2>
+        <div class="form-group"><label>Email</label><input type="email" id="adminLoginEmail" placeholder="adminglobal123@mail.com"></div>
+        <div class="form-group"><label>Mot de passe</label><input type="password" id="adminLoginPassword" placeholder="••••••••"></div>
+        <button class="btn btn-primary btn-lg" style="width:100%;" onclick="handleAdminLogin()"><i class="fas fa-sign-in-alt"></i> Accéder au Cockpit</button>
+        <p style="text-align:center; margin-top:1rem; font-size:0.8rem; color:var(--muted);">Démo: adminglobal123@mail.com / adminglobal123</p>
+    </div>
+</div>
+
+<!-- COCKPIT ADMIN (caché par défaut) -->
+<div id="adminApp" style="display:none;">
+    <div class="admin-layout">
+        <!-- SIDEBAR -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-logo"><h2>⚙️ Cockpit Admin</h2></div>
+            <nav class="sidebar-nav">
+                <button class="sidebar-link active" onclick="switchAdminTab('dashboard')"><i class="fas fa-chart-pie"></i> Dashboard</button>
+                <button class="sidebar-link" onclick="switchAdminTab('clients')"><i class="fas fa-users"></i> Clients & Bars</button>
+                <button class="sidebar-link" onclick="switchAdminTab('subscriptions')"><i class="fas fa-box"></i> Abonnements</button>
+                <button class="sidebar-link" onclick="switchAdminTab('payments')"><i class="fas fa-money-bill"></i> Paiements</button>
+                <button class="sidebar-link" onclick="switchAdminTab('announcements')"><i class="fas fa-bullhorn"></i> Annonces</button>
+                <button class="sidebar-link" onclick="switchAdminTab('messages')"><i class="fas fa-comments"></i> Messagerie</button>
+                <button class="sidebar-link" onclick="switchAdminTab('monitoring')"><i class="fas fa-heartbeat"></i> Monitoring</button>
+                <button class="sidebar-link" onclick="switchAdminTab('analytics')"><i class="fas fa-chart-line"></i> Analytics</button>
+                <button class="sidebar-link" onclick="switchAdminTab('security')"><i class="fas fa-shield-alt"></i> Sécurité</button>
+                <button class="sidebar-link" onclick="switchAdminTab('settings')"><i class="fas fa-cog"></i> Paramètres</button>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="sidebar-link" onclick="adminLogout()"><i class="fas fa-sign-out-alt"></i> Déconnexion</button>
+            </div>
+        </aside>
+        
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+            <!-- HEADER -->
+            <div class="page-header">
+                <h1 id="pageTitle">Dashboard</h1>
+                <div class="user-badge">
+                    <div class="avatar" id="adminAvatar">A</div>
+                    <div>
+                        <div style="font-weight:600;" id="adminName">Super Admin</div>
+                        <div style="font-size:0.7rem; color:var(--gold);" id="adminRole">super_admin</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- DASHBOARD -->
+            <div class="tab-content active" id="tab-dashboard">
+                <div class="stats-grid" id="dashboardStats"></div>
+                <div class="card"><div class="card-header"><h3><i class="fas fa-clock"></i> Activité récente</h3></div><div id="recentActivity" style="max-height:300px; overflow-y:auto;"></div></div>
+            </div>
+            
+            <!-- CLIENTS -->
+            <div class="tab-content" id="tab-clients">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-store"></i> Bars & Terrasses</h3>
+                        <button class="btn btn-primary" onclick="openAddClientModal()"><i class="fas fa-plus"></i> Ajouter</button>
+                    </div>
+                    <div class="search-bar">
+                        <input type="text" id="clientSearch" placeholder="🔍 Rechercher..." oninput="renderClients()">
+                        <select id="clientStatusFilter" onchange="renderClients()"><option value="all">Tous</option><option value="active">Actif</option><option value="inactive">Inactif</option><option value="blocked">Bloqué</option></select>
+                    </div>
+                    <div class="table-wrapper"><table><thead><tr><th>Nom</th><th>Propriétaire</th><th>Email</th><th>Téléphone</th><th>Pack</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="clientsTable"></tbody></table></div>
+                </div>
+            </div>
+            
+            <!-- ABONNEMENTS -->
+            <div class="tab-content" id="tab-subscriptions">
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-layer-group"></i> Packs d'abonnement</h3><button class="btn btn-primary" onclick="openAddPackModal()"><i class="fas fa-plus"></i> Nouveau Pack</button></div>
+                    <div class="table-wrapper"><table><thead><tr><th>Nom</th><th>Prix/mois</th><th>Durée min</th><th>Fonctionnalités</th><th>Actif</th><th>Actions</th></tr></thead><tbody id="packsTable"></tbody></table></div>
+                </div>
+            </div>
+            
+            <!-- PAIEMENTS -->
+            <div class="tab-content" id="tab-payments">
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-receipt"></i> Transactions</h3></div>
+                    <div class="search-bar">
+                        <input type="text" id="paymentSearch" placeholder="🔍 Client..." oninput="renderPayments()">
+                        <select id="paymentMethodFilter" onchange="renderPayments()"><option value="all">Tous</option><option value="mobile_money">Mobile Money</option><option value="orange_money">Orange Money</option><option value="airtel_money">Airtel Money</option><option value="cash">Espèces</option></select>
+                    </div>
+                    <div class="table-wrapper"><table><thead><tr><th>Client</th><th>Pack</th><th>Montant</th><th>Méthode</th><th>Date</th><th>Statut</th></tr></thead><tbody id="paymentsTable"></tbody></table></div>
+                </div>
+            </div>
+            
+            <!-- ANNONCES -->
+            <div class="tab-content" id="tab-announcements">
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-bullhorn"></i> Annonces & Pop-ups</h3><button class="btn btn-primary" onclick="openAnnouncementModal()"><i class="fas fa-plus"></i> Nouvelle annonce</button></div>
+                    <div class="table-wrapper"><table><thead><tr><th>Titre</th><th>Cible</th><th>Date début</th><th>Date fin</th><th>Actif</th><th>Actions</th></tr></thead><tbody id="announcementsTable"></tbody></table></div>
+                </div>
+            </div>
+            
+            <!-- MESSAGERIE -->
+            <div class="tab-content" id="tab-messages">
+                <div class="card"><div class="card-header"><h3><i class="fas fa-comments"></i> Tickets support</h3></div><div id="messagesList" style="max-height:400px; overflow-y:auto;"></div></div>
+            </div>
+            
+            <!-- MONITORING -->
+            <div class="tab-content" id="tab-monitoring">
+                <div class="stats-grid" id="monitoringStats"></div>
+                <div class="card"><div class="card-header"><h3><i class="fas fa-server"></i> État des services</h3></div><div id="servicesStatus"></div></div>
+            </div>
+            
+            <!-- ANALYTICS -->
+            <div class="tab-content" id="tab-analytics">
+                <div class="stats-grid" id="analyticsStats"></div>
+                <div class="card"><div class="card-header"><h3><i class="fas fa-chart-bar"></i> Revenus mensuels</h3></div><div id="revenueChart" style="height:250px; display:flex; align-items:flex-end; gap:8px; padding:1rem;"></div></div>
+            </div>
+            
+            <!-- SÉCURITÉ -->
+            <div class="tab-content" id="tab-security">
+                <div class="card"><div class="card-header"><h3><i class="fas fa-shield-alt"></i> Journal d'audit</h3></div><div class="table-wrapper"><table><thead><tr><th>Date</th><th>Admin</th><th>Action</th><th>Détails</th><th>IP</th></tr></thead><tbody id="auditLogTable"></tbody></table></div></div>
+            </div>
+            
+            <!-- PARAMÈTRES -->
+            <div class="tab-content" id="tab-settings">
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-cog"></i> Configuration globale</h3></div>
+                    <div class="form-group"><label>Nom de la plateforme</label><input type="text" id="platformName" value="Mes Bes Extrêmes"></div>
+                    <div class="form-group"><label>Email support</label><input type="email" id="supportEmail" value="support@mesbesextremes.cd"></div>
+                    <div class="form-group"><label>Mode maintenance</label><select id="maintenanceMode"><option value="false">Désactivé</option><option value="true">Activé</option></select></div>
+                    <button class="btn btn-primary" onclick="saveSettings()"><i class="fas fa-save"></i> Enregistrer</button>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="addClientModal"><div class="modal large"><h3>Ajouter/Modifier un client</h3><input type="hidden" id="editClientId"><div class="form-row"><div class="form-group"><label>Nom du bar</label><input type="text" id="clientBarName"></div><div class="form-group"><label>Propriétaire</label><input type="text" id="clientOwner"></div></div><div class="form-row"><div class="form-group"><label>Email</label><input type="email" id="clientEmail"></div><div class="form-group"><label>Téléphone</label><input type="text" id="clientPhone"></div></div><div class="form-row"><div class="form-group"><label>Pack</label><select id="clientPack"></select></div><div class="form-group"><label>Statut</label><select id="clientStatus"><option value="active">Actif</option><option value="inactive">Inactif</option><option value="blocked">Bloqué</option></select></div></div><div class="form-group"><label>Adresse</label><input type="text" id="clientAddress"></div><div class="modal-actions"><button class="btn btn-outline" onclick="closeModal('addClientModal')">Annuler</button><button class="btn btn-success" onclick="saveClient()">Enregistrer</button></div></div></div>
+
+<div class="modal-overlay" id="addPackModal"><div class="modal"><h3>Ajouter/Modifier un pack</h3><input type="hidden" id="editPackId"><div class="form-group"><label>Nom du pack</label><input type="text" id="packName"></div><div class="form-row"><div class="form-group"><label>Prix/mois (FC)</label><input type="number" id="packPrice"></div><div class="form-group"><label>Durée min (mois)</label><input type="number" id="packDuration" value="1"></div></div><div class="form-group"><label>Fonctionnalités (séparées par ,)</label><textarea id="packFeatures" rows="3"></textarea></div><div class="form-group"><label>Actif</label><select id="packActive"><option value="true">Oui</option><option value="false">Non</option></select></div><div class="modal-actions"><button class="btn btn-outline" onclick="closeModal('addPackModal')">Annuler</button><button class="btn btn-success" onclick="savePack()">Enregistrer</button></div></div></div>
+
+<div class="modal-overlay" id="announcementModal"><div class="modal"><h3>Nouvelle annonce</h3><div class="form-group"><label>Titre</label><input type="text" id="announcementTitle"></div><div class="form-group"><label>Message</label><textarea id="announcementMessage" rows="4"></textarea></div><div class="form-group"><label>Cible</label><select id="announcementTarget"><option value="all">Tous les clients</option><option value="active">Clients actifs</option><option value="specific">Client spécifique</option></select></div><div class="form-group" id="specificClientGroup" style="display:none;"><label>Client</label><select id="announcementClient"></select></div><div class="form-row"><div class="form-group"><label>Date début</label><input type="date" id="announcementStart"></div><div class="form-group"><label>Date fin</label><input type="date" id="announcementEnd"></div></div><div class="modal-actions"><button class="btn btn-outline" onclick="closeModal('announcementModal')">Annuler</button><button class="btn btn-success" onclick="sendAnnouncement()">Envoyer</button></div></div></div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ============================================
+// CONFIGURATION SUPABASE
+// ============================================
+const SUPABASE_URL = 'https://irphsdjekxwultstxunv.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_DPYyHk3Ss5l9qw7MRSugOg_TOmUh3cb';
+let supabaseClient = null;
+
+// ============================================
+// VARIABLES GLOBALES
+// ============================================
+let adminUser = null;
+let clients = [];
+let packs = [];
+let payments = [];
+let announcements = [];
+let messages = [];
+let auditLogs = [];
+let platformSettings = { platformName: 'Mes Bes Extrêmes', supportEmail: 'support@mesbesextremes.cd', maintenanceMode: false };
+
+// ============================================
+// DONNÉES DÉMO
+// ============================================
+const demoClients = [
+    { id: 1, barName: 'Bar Le Relax', owner: 'Jean Kabongo', email: 'lerelax@gmail.com', phone: '+243812345678', packId: 1, status: 'active', address: 'Kinshasa, Gombe' },
+    { id: 2, barName: 'Terrasse du Fleuve', owner: 'Marie Mbala', email: 'terrasse.fleuve@gmail.com', phone: '+243823456789', packId: 2, status: 'active', address: 'Kinshasa, Lingwala' },
+    { id: 3, barName: 'Chez Maman Soso', owner: 'Sophie Lukusa', email: 'soso@gmail.com', phone: '+243834567890', packId: 1, status: 'inactive', address: 'Lubumbashi' },
+    { id: 4, barName: 'VIP Lounge', owner: 'Patrick Tshilombo', email: 'vip.lounge@gmail.com', phone: '+243845678901', packId: 3, status: 'active', address: 'Goma' },
+    { id: 5, barName: 'Bar du Coin', owner: 'David Mbuyi', email: 'coin@gmail.com', phone: '+243856789012', packId: 1, status: 'blocked', address: 'Kisangani' }
+];
+
+const demoPacks = [
+    { id: 1, name: 'Free', price: 0, duration: 1, features: '50 articles,1 utilisateur,rapports basiques', active: true },
+    { id: 2, name: 'Starter', price: 5990, duration: 1, features: 'Articles illimités,3 utilisateurs,rapports avancés,support email', active: true },
+    { id: 3, name: 'Pro', price: 12990, duration: 1, features: 'Articles illimités,10 utilisateurs,reconnaissance faciale,support 24/7', active: true },
+    { id: 4, name: 'Entreprise', price: 25990, duration: 1, features: 'Articles illimités,utilisateurs illimités,API personnalisée,formation incluse', active: true }
+];
+
+const demoPayments = [
+    { id: 1, clientId: 1, clientName: 'Bar Le Relax', packName: 'Starter', amount: 5990, method: 'mobile_money', date: '2026-05-01', status: 'paid' },
+    { id: 2, clientId: 2, clientName: 'Terrasse du Fleuve', packName: 'Pro', amount: 12990, method: 'orange_money', date: '2026-05-03', status: 'paid' },
+    { id: 3, clientId: 4, clientName: 'VIP Lounge', packName: 'Entreprise', amount: 25990, method: 'airtel_money', date: '2026-05-05', status: 'paid' },
+    { id: 4, clientId: 3, clientName: 'Chez Maman Soso', packName: 'Free', amount: 0, method: 'cash', date: '2026-05-10', status: 'pending' }
+];
+
+// ============================================
+// INITIALISATION SUPABASE
+// ============================================
+function initSupabase() {
+    try { supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); console.log('✅ Supabase Admin connecté'); } catch(e) { console.warn('⚠️ Supabase non disponible'); }
+}
+
+// ============================================
+// AUTHENTIFICATION ADMIN
+// ============================================
+async function handleAdminLogin() {
+    const email = document.getElementById('adminLoginEmail').value.trim();
+    const password = document.getElementById('adminLoginPassword').value;
+    if(!email || !password) { showToast('Veuillez remplir tous les champs', 'error'); return; }
+    
+    // Vérifier compte démo
+    if(email === 'adminglobal123@mail.com' && password === 'adminglobal123') {
+        adminUser = { id: 'admin-demo', email: 'adminglobal123@mail.com', fullName: 'Super Admin', role: 'super_admin' };
+        onAdminLoginSuccess();
+        return;
+    }
+    
+    // Vérifier Supabase
+    if(supabaseClient) {
+        try {
+            const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+            if(data?.user) {
+                const { data: adminData } = await supabaseClient.from('admin_users').select('*').eq('user_id', data.user.id).single();
+                if(adminData) {
+                    adminUser = { id: data.user.id, email, fullName: adminData.full_name, role: adminData.role };
+                    onAdminLoginSuccess();
+                    return;
+                }
+            }
+        } catch(e) {}
+    }
+    
+    showToast('Identifiants invalides ou accès non autorisé', 'error');
+}
+
+async function handleAdminSignup() {
+    const fullName = document.getElementById('signupFullName').value;
+    const email = document.getElementById('signupEmail').value;
+    const password = document.getElementById('signupPassword').value;
+    if(!fullName || !email || !password) { showToast('Tous les champs sont requis', 'error'); return; }
+    
+    if(supabaseClient) {
+        try {
+            const { data, error } = await supabaseClient.auth.signUp({ email, password, options: { data: { full_name: fullName } } });
+            if(data?.user) {
+                await supabaseClient.from('admin_users').insert({ user_id: data.user.id, full_name: fullName, role: 'support', email });
+                adminUser = { id: data.user.id, email, fullName, role: 'support' };
+                onAdminLoginSuccess();
+                return;
+            }
+        } catch(e) {}
+    }
+    
+    showToast('Erreur lors de la création du compte', 'error');
+}
+
+function onAdminLoginSuccess() {
+    document.getElementById('adminLoginPage').style.display = 'none';
+    document.getElementById('adminApp').style.display = 'block';
+    document.getElementById('adminName').textContent = adminUser.fullName;
+    document.getElementById('adminRole').textContent = adminUser.role;
+    document.getElementById('adminAvatar').textContent = adminUser.fullName.charAt(0).toUpperCase();
+    
+    // Charger données démo si première connexion
+    if(!localStorage.getItem('cockpit_clients')) {
+        localStorage.setItem('cockpit_clients', JSON.stringify(demoClients));
+        localStorage.setItem('cockpit_packs', JSON.stringify(demoPacks));
+        localStorage.setItem('cockpit_payments', JSON.stringify(demoPayments));
+    }
+    
+    loadAllData();
+    renderDashboard();
+    showToast(`Bienvenue ${adminUser.fullName} 👑`);
+}
+
+function adminLogout() {
+    if(supabaseClient) supabaseClient.auth.signOut().catch(()=>{});
+    adminUser = null;
+    localStorage.removeItem('cockpit_session');
+    document.getElementById('adminLoginPage').style.display = 'flex';
+    document.getElementById('adminApp').style.display = 'none';
+}
+
+function loadAllData() {
+    clients = JSON.parse(localStorage.getItem('cockpit_clients') || '[]');
+    packs = JSON.parse(localStorage.getItem('cockpit_packs') || '[]');
+    payments = JSON.parse(localStorage.getItem('cockpit_payments') || '[]');
+    announcements = JSON.parse(localStorage.getItem('cockpit_announcements') || '[]');
+    messages = JSON.parse(localStorage.getItem('cockpit_messages') || '[]');
+    auditLogs = JSON.parse(localStorage.getItem('cockpit_audit_logs') || '[]');
+    platformSettings = JSON.parse(localStorage.getItem('cockpit_settings') || JSON.stringify(platformSettings));
+    platformSettings = typeof platformSettings === 'string' ? JSON.parse(platformSettings) : platformSettings;
+}
+
+function saveAllData() {
+    localStorage.setItem('cockpit_clients', JSON.stringify(clients));
+    localStorage.setItem('cockpit_packs', JSON.stringify(packs));
+    localStorage.setItem('cockpit_payments', JSON.stringify(payments));
+    localStorage.setItem('cockpit_announcements', JSON.stringify(announcements));
+    localStorage.setItem('cockpit_messages', JSON.stringify(messages));
+    localStorage.setItem('cockpit_audit_logs', JSON.stringify(auditLogs));
+    localStorage.setItem('cockpit_settings', JSON.stringify(platformSettings));
+}
+
+// ============================================
+// RENDER FUNCTIONS
+// ============================================
+function renderDashboard() {
+    const activeClients = clients.filter(c => c.status === 'active').length;
+    const totalRevenue = payments.filter(p => p.status === 'paid').reduce((s, p) => s + p.amount, 0);
+    const pendingPayments = payments.filter(p => p.status === 'pending').length;
+    const blockedClients = clients.filter(c => c.status === 'blocked').length;
+    
+    document.getElementById('dashboardStats').innerHTML = `
+        <div class="stat-card"><div class="stat-icon"><i class="fas fa-store"></i></div><div class="stat-value">${clients.length}</div><div class="stat-label">Total clients</div></div>
+        <div class="stat-card"><div class="stat-icon"><i class="fas fa-check-circle"></i></div><div class="stat-value">${activeClients}</div><div class="stat-label">Actifs</div></div>
+        <div class="stat-card"><div class="stat-icon"><i class="fas fa-money-bill"></i></div><div class="stat-value">${formatFC(totalRevenue)}</div><div class="stat-label">CA Total</div></div>
+        <div class="stat-card"><div class="stat-icon"><i class="fas fa-clock"></i></div><div class="stat-value">${pendingPayments}</div><div class="stat-label">Paiements en attente</div></div>
+        <div class="stat-card"><div class="stat-icon"><i class="fas fa-ban"></i></div><div class="stat-value">${blockedClients}</div><div class="stat-label">Bloqués</div></div>
+        <div class="stat-card"><div class="stat-icon"><i class="fas fa-layer-group"></i></div><div class="stat-value">${packs.length}</div><div class="stat-label">Packs</div></div>
+    `;
+    
+    const recentPayments = [...payments].sort((a,b) => b.id - a.id).slice(0, 5);
+    document.getElementById('recentActivity').innerHTML = recentPayments.map(p => `
+        <div style="padding:0.75rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+            <div><strong>${p.clientName}</strong> - ${p.packName}<br><small style="color:var(--muted);">${p.date} via ${formatMethod(p.method)}</small></div>
+            <span class="badge ${p.status === 'paid' ? 'badge-success' : 'badge-warning'}">${p.status === 'paid' ? 'Payé' : 'En attente'}</span>
+            <span style="color:var(--gold); font-weight:600;">${formatFC(p.amount)}</span>
+        </div>
+    `).join('') || '<p style="text-align:center; color:var(--muted);">Aucune activité récente</p>';
+}
+
+function renderClients() {
+    const search = (document.getElementById('clientSearch')?.value || '').toLowerCase();
+    const filter = document.getElementById('clientStatusFilter')?.value || 'all';
+    let filtered = clients.filter(c => c.barName.toLowerCase().includes(search) || c.owner.toLowerCase().includes(search));
+    if(filter !== 'all') filtered = filtered.filter(c => c.status === filter);
+    
+    document.getElementById('clientsTable').innerHTML = filtered.map(c => {
+        const pack = packs.find(p => p.id === c.packId);
+        const statusBadge = c.status === 'active' ? 'badge-success' : c.status === 'blocked' ? 'badge-danger' : 'badge-warning';
+        const statusText = c.status === 'active' ? 'Actif' : c.status === 'blocked' ? 'Bloqué' : 'Inactif';
+        return `<tr>
+            <td><strong>${c.barName}</strong><br><small style="color:var(--muted);">${c.address || ''}</small></td>
+            <td>${c.owner}</td>
+            <td>${c.email}</td>
+            <td>${c.phone}</td>
+            <td><span class="badge badge-gold">${pack?.name || 'Aucun'}</span></td>
+            <td><span class="badge ${statusBadge}">${statusText}</span></td>
+            <td style="display:flex; gap:0.25rem; flex-wrap:wrap;">
+                <button class="btn btn-info btn-sm" onclick="editClient(${c.id})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-warning btn-sm" onclick="toggleClientStatus(${c.id})"><i class="fas fa-${c.status === 'blocked' ? 'unlock' : 'ban'}"></i></button>
+                <button class="btn btn-success btn-sm" onclick="extendSubscription(${c.id})"><i class="fas fa-calendar-plus"></i></button>
+                <button class="btn btn-danger btn-sm" onclick="deleteClient(${c.id})"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function renderPacks() {
+    document.getElementById('packsTable').innerHTML = packs.map(p => `
+        <tr>
+            <td><strong>${p.name}</strong></td>
+            <td>${formatFC(p.price)}</td>
+            <td>${p.duration} mois</td>
+            <td><small>${p.features.replace(/,/g, ', ')}</small></td>
+            <td><span class="badge ${p.active ? 'badge-success' : 'badge-danger'}">${p.active ? 'Oui' : 'Non'}</span></td>
+            <td style="display:flex; gap:0.25rem;">
+                <button class="btn btn-info btn-sm" onclick="editPack(${p.id})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-danger btn-sm" onclick="deletePack(${p.id})"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function renderPayments() {
+    const search = (document.getElementById('paymentSearch')?.value || '').toLowerCase();
+    const filter = document.getElementById('paymentMethodFilter')?.value || 'all';
+    let filtered = payments.filter(p => p.clientName.toLowerCase().includes(search));
+    if(filter !== 'all') filtered = filtered.filter(p => p.method === filter);
+    
+    document.getElementById('paymentsTable').innerHTML = filtered.map(p => `
+        <tr>
+            <td>${p.clientName}</td>
+            <td>${p.packName}</td>
+            <td style="color:var(--gold); font-weight:600;">${formatFC(p.amount)}</td>
+            <td>${formatMethod(p.method)}</td>
+            <td>${p.date}</td>
+            <td><span class="badge ${p.status === 'paid' ? 'badge-success' : 'badge-warning'}">${p.status === 'paid' ? 'Payé' : 'En attente'}</span></td>
+        </tr>
+    `).join('');
+}
+
+function renderAnnouncements() {
+    document.getElementById('announcementsTable').innerHTML = announcements.map(a => `
+        <tr>
+            <td><strong>${a.title}</strong></td>
+            <td><span class="badge badge-info">${a.target === 'all' ? 'Tous' : a.target === 'active' ? 'Actifs' : a.clientName || 'Spécifique'}</span></td>
+            <td>${a.startDate}</td>
+            <td>${a.endDate}</td>
+            <td><span class="badge ${a.active ? 'badge-success' : 'badge-danger'}">${a.active ? 'Actif' : 'Inactif'}</span></td>
+            <td><button class="btn btn-danger btn-sm" onclick="deleteAnnouncement(${a.id})"><i class="fas fa-trash"></i></button></td>
+        </tr>
+    `).join('');
+}
+
+function renderMonitoring() {
+    document.getElementById('monitoringStats').innerHTML = `
+        <div class="stat-card"><div class="stat-icon"><i class="fas fa-signal"></i></div><div class="stat-value">98.5%</div><div class="stat-label">Uptime</div></div>
+        <div class="stat-card"><div class="stat-icon"><i class="fas fa-tachometer-alt"></i></div><div class="stat-value">45ms</div><div class="stat-label">Temps réponse</div></div>
+        <div class="stat-card"><div class="stat-icon"><i class="fas fa-users"></i></div><div class="stat-value">${clients.filter(c => c.status === 'active').length}</div><div class="stat-label">En ligne</div></div>
+        <div class="stat-card"><div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div><div class="stat-value">2</div><div class="stat-label">Erreurs (24h)</div></div>
+    `;
+    document.getElementById('servicesStatus').innerHTML = `
+        <div style="display:flex; justify-content:space-between; padding:0.75rem; border-bottom:1px solid var(--border);"><span>🗄️ Base de données</span><span class="badge badge-success">Opérationnel</span></div>
+        <div style="display:flex; justify-content:space-between; padding:0.75rem; border-bottom:1px solid var(--border);"><span>🔐 Authentification</span><span class="badge badge-success">Opérationnel</span></div>
+        <div style="display:flex; justify-content:space-between; padding:0.75rem; border-bottom:1px solid var(--border);"><span>💾 Stockage</span><span class="badge badge-success">Opérationnel</span></div>
+        <div style="display:flex; justify-content:space-between; padding:0.75rem;"><span>📨 Notifications</span><span class="badge badge-warning">Dégradé</span></div>
+    `;
+}
+
+function renderAnalytics() {
+    const monthlyRevenue = [0, 0, 5990, 12990, 0, 25990, 0, 0, 0, 0, 0, 0];
+    const maxRev = Math.max(...monthlyRevenue, 1);
+    
+    document.getElementById('analyticsStats').innerHTML = `
+        <div class="stat-card"><div class="stat-icon"><i class="fas fa-chart-line"></i></div><div class="stat-value">${formatFC(monthlyRevenue.reduce((a,b)=>a+b,0))}</div><div class="stat-label">CA Annuel</div></div>
+        <div class="stat-card"><div class="stat-icon"><i class="fas fa-percentage"></i></div><div class="stat-value">85%</div><div class="stat-label">Taux rétention</div></div>
+        <div class="stat-card"><div class="stat-icon"><i class="fas fa-user-plus"></i></div><div class="stat-value">12</div><div class="stat-label">Nouveaux/mois</div></div>
+    `;
+    
+    document.getElementById('revenueChart').innerHTML = monthlyRevenue.map((val, i) => {
+        const height = (val / maxRev) * 200;
+        return `<div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
+            <span style="font-size:0.65rem; color:var(--muted);">${formatFC(val)}</span>
+            <div style="width:100%; height:${Math.max(height, 4)}px; background:linear-gradient(180deg,var(--gold),var(--accent)); border-radius:4px 4px 0 0;"></div>
+            <span style="font-size:0.6rem; color:var(--muted);">M${i+1}</span>
+        </div>`;
+    }).join('');
+}
+
+function renderAuditLog() {
+    document.getElementById('auditLogTable').innerHTML = auditLogs.slice().reverse().slice(0, 50).map(l => `
+        <tr><td>${l.date}</td><td>${l.admin}</td><td>${l.action}</td><td>${l.details}</td><td>${l.ip}</td></tr>
+    `).join('') || '<tr><td colspan="5" style="text-align:center; color:var(--muted);">Aucun log</td></tr>';
+}
+
+// ============================================
+// ACTIONS CLIENTS
+// ============================================
+function openAddClientModal() {
+    document.getElementById('editClientId').value = '';
+    document.getElementById('clientBarName').value = '';
+    document.getElementById('clientOwner').value = '';
+    document.getElementById('clientEmail').value = '';
+    document.getElementById('clientPhone').value = '';
+    document.getElementById('clientAddress').value = '';
+    document.getElementById('clientStatus').value = 'active';
+    document.getElementById('clientPack').innerHTML = '<option value="">-- Aucun --</option>' + packs.map(p => `<option value="${p.id}">${p.name} (${formatFC(p.price)})</option>`).join('');
+    document.getElementById('addClientModal').classList.add('active');
+}
+
+function editClient(id) {
+    const client = clients.find(c => c.id === id);
+    if(!client) return;
+    document.getElementById('editClientId').value = client.id;
+    document.getElementById('clientBarName').value = client.barName;
+    document.getElementById('clientOwner').value = client.owner;
+    document.getElementById('clientEmail').value = client.email;
+    document.getElementById('clientPhone').value = client.phone;
+    document.getElementById('clientAddress').value = client.address || '';
+    document.getElementById('clientStatus').value = client.status;
+    document.getElementById('clientPack').innerHTML = packs.map(p => `<option value="${p.id}" ${p.id === client.packId ? 'selected' : ''}>${p.name} (${formatFC(p.price)})</option>`).join('');
+    document.getElementById('addClientModal').classList.add('active');
+}
+
+function saveClient() {
+    const id = document.getElementById('editClientId').value;
+    const data = {
+        barName: document.getElementById('clientBarName').value,
+        owner: document.getElementById('clientOwner').value,
+        email: document.getElementById('clientEmail').value,
+        phone: document.getElementById('clientPhone').value,
+        address: document.getElementById('clientAddress').value,
+        packId: parseInt(document.getElementById('clientPack').value) || null,
+        status: document.getElementById('clientStatus').value
+    };
+    
+    if(id) {
+        const idx = clients.findIndex(c => c.id === parseInt(id));
+        if(idx >= 0) clients[idx] = {...clients[idx], ...data};
+        logAudit('Modification client', `${data.barName}`);
+    } else {
+        data.id = Date.now();
+        clients.push(data);
+        logAudit('Création client', `${data.barName}`);
+    }
+    
+    saveAllData(); closeModal('addClientModal'); renderClients(); renderDashboard();
+    showToast(id ? 'Client modifié' : 'Client ajouté');
+}
+
+function toggleClientStatus(id) {
+    const client = clients.find(c => c.id === id);
+    if(!client) return;
+    client.status = client.status === 'blocked' ? 'active' : 'blocked';
+    saveAllData(); renderClients(); renderDashboard();
+    logAudit(client.status === 'blocked' ? 'Blocage client' : 'Déblocage client', client.barName);
+    showToast(`${client.barName} ${client.status === 'blocked' ? 'bloqué' : 'débloqué'}`);
+}
+
+function extendSubscription(id) {
+    const client = clients.find(c => c.id === id);
+    if(!client) return;
+    const months = prompt('Prolonger de combien de mois ?', '1');
+    if(months && parseInt(months) > 0) {
+        showToast(`Abonnement de ${client.barName} prolongé de ${months} mois`);
+        logAudit('Prolongation abonnement', `${client.barName} +${months} mois`);
+    }
+}
+
+function deleteClient(id) {
+    const client = clients.find(c => c.id === id);
+    if(!client) return;
+    if(confirm(`Supprimer définitivement "${client.barName}" ?`)) {
+        clients = clients.filter(c => c.id !== id);
+        saveAllData(); renderClients(); renderDashboard();
+        logAudit('Suppression client', client.barName);
+        showToast(`${client.barName} supprimé`);
+    }
+}
+
+// ============================================
+// ACTIONS PACKS
+// ============================================
+function openAddPackModal() {
+    document.getElementById('editPackId').value = '';
+    document.getElementById('packName').value = '';
+    document.getElementById('packPrice').value = 0;
+    document.getElementById('packDuration').value = 1;
+    document.getElementById('packFeatures').value = '';
+    document.getElementById('packActive').value = 'true';
+    document.getElementById('addPackModal').classList.add('active');
+}
+
+function editPack(id) {
+    const pack = packs.find(p => p.id === id);
+    if(!pack) return;
+    document.getElementById('editPackId').value = pack.id;
+    document.getElementById('packName').value = pack.name;
+    document.getElementById('packPrice').value = pack.price;
+    document.getElementById('packDuration').value = pack.duration;
+    document.getElementById('packFeatures').value = pack.features;
+    document.getElementById('packActive').value = pack.active ? 'true' : 'false';
+    document.getElementById('addPackModal').classList.add('active');
+}
+
+function savePack() {
+    const id = document.getElementById('editPackId').value;
+    const data = {
+        name: document.getElementById('packName').value,
+        price: parseInt(document.getElementById('packPrice').value) || 0,
+        duration: parseInt(document.getElementById('packDuration').value) || 1,
+        features: document.getElementById('packFeatures').value,
+        active: document.getElementById('packActive').value === 'true'
+    };
+    
+    if(id) {
+        const idx = packs.findIndex(p => p.id === parseInt(id));
+        if(idx >= 0) packs[idx] = {...packs[idx], ...data};
+        logAudit('Modification pack', data.name);
+    } else {
+        data.id = Date.now();
+        packs.push(data);
+        logAudit('Création pack', data.name);
+    }
+    
+    saveAllData(); closeModal('addPackModal'); renderPacks(); renderDashboard();
+    showToast(id ? 'Pack modifié' : 'Pack créé');
+}
+
+function deletePack(id) {
+    const pack = packs.find(p => p.id === id);
+    if(!pack) return;
+    if(confirm(`Supprimer le pack "${pack.name}" ?`)) {
+        packs = packs.filter(p => p.id !== id);
+        saveAllData(); renderPacks();
+        logAudit('Suppression pack', pack.name);
+        showToast(`Pack ${pack.name} supprimé`);
+    }
+}
+
+// ============================================
+// ANNONCES
+// ============================================
+function openAnnouncementModal() {
+    document.getElementById('announcementTitle').value = '';
+    document.getElementById('announcementMessage').value = '';
+    document.getElementById('announcementTarget').value = 'all';
+    document.getElementById('announcementStart').value = new Date().toISOString().split('T')[0];
+    document.getElementById('announcementEnd').value = new Date(Date.now() + 7*86400000).toISOString().split('T')[0];
+    document.getElementById('specificClientGroup').style.display = 'none';
+    document.getElementById('announcementClient').innerHTML = clients.map(c => `<option value="${c.id}">${c.barName}</option>`).join('');
+    document.getElementById('announcementModal').classList.add('active');
+    
+    document.getElementById('announcementTarget').onchange = function() {
+        document.getElementById('specificClientGroup').style.display = this.value === 'specific' ? 'block' : 'none';
+    };
+}
+
+function sendAnnouncement() {
+    const data = {
+        id: Date.now(),
+        title: document.getElementById('announcementTitle').value,
+        message: document.getElementById('announcementMessage').value,
+        target: document.getElementById('announcementTarget').value,
+        clientId: document.getElementById('announcementTarget').value === 'specific' ? document.getElementById('announcementClient').value : null,
+        clientName: document.getElementById('announcementTarget').value === 'specific' ? clients.find(c => c.id === parseInt(document.getElementById('announcementClient').value))?.barName : null,
+        startDate: document.getElementById('announcementStart').value,
+        endDate: document.getElementById('announcementEnd').value,
+        active: true
+    };
+    
+    announcements.push(data);
+    saveAllData(); closeModal('announcementModal'); renderAnnouncements();
+    logAudit('Annonce envoyée', `${data.title} → ${data.target}`);
+    showToast('Annonce envoyée avec succès !');
+}
+
+function deleteAnnouncement(id) {
+    announcements = announcements.filter(a => a.id !== id);
+    saveAllData(); renderAnnouncements();
+    showToast('Annonce supprimée');
+}
+
+// ============================================
+// PARAMÈTRES
+// ============================================
+function saveSettings() {
+    platformSettings = {
+        platformName: document.getElementById('platformName').value,
+        supportEmail: document.getElementById('supportEmail').value,
+        maintenanceMode: document.getElementById('maintenanceMode').value === 'true'
+    };
+    saveAllData();
+    logAudit('Paramètres modifiés', 'Configuration globale');
+    showToast('Paramètres enregistrés');
+}
+
+// ============================================
+// AUDIT LOG
+// ============================================
+function logAudit(action, details) {
+    auditLogs.push({
+        date: new Date().toISOString(),
+        admin: adminUser?.email || 'system',
+        action,
+        details,
+        ip: '127.0.0.1'
+    });
+    if(auditLogs.length > 500) auditLogs.shift();
+    saveAllData();
+}
+
+// ============================================
+// UTILITAIRES
+// ============================================
+function formatFC(a) { return a ? a.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' FC' : '0 FC'; }
+function formatMethod(m) { return m === 'mobile_money' ? '📱 Mobile Money' : m === 'orange_money' ? '🟠 Orange Money' : m === 'airtel_money' ? '🔴 Airtel Money' : '💵 Espèces'; }
+function showToast(m, t='success') { const c=document.getElementById('toastContainer'); const d=document.createElement('div'); d.className='toast'; d.textContent=m; c.appendChild(d); setTimeout(()=>d.remove(),3000); }
+function switchAdminTab(t) {
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    const tab = document.getElementById('tab-' + t);
+    if(tab) tab.classList.add('active');
+    document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+    const link = document.querySelector(`.sidebar-link[onclick*="${t}"]`);
+    if(link) link.classList.add('active');
+    document.getElementById('pageTitle').textContent = link?.textContent?.trim() || t;
+    
+    if(t === 'dashboard') renderDashboard();
+    else if(t === 'clients') renderClients();
+    else if(t === 'subscriptions') renderPacks();
+    else if(t === 'payments') renderPayments();
+    else if(t === 'announcements') renderAnnouncements();
+    else if(t === 'monitoring') renderMonitoring();
+    else if(t === 'analytics') renderAnalytics();
+    else if(t === 'security') renderAuditLog();
+}
+function closeModal(id) { const m = document.getElementById(id); if(m) m.classList.remove('active'); }
+
+// ============================================
+// RESTORE SESSION
+// ============================================
+function restoreAdminSession() {
+    const session = localStorage.getItem('cockpit_session');
+    if(session) {
+        try {
+            const data = JSON.parse(session);
+            if(data.email === 'adminglobal123@mail.com') {
+                adminUser = { id: 'admin-demo', email: data.email, fullName: 'Super Admin', role: 'super_admin' };
+                onAdminLoginSuccess();
+                return;
+            }
+        } catch(e) {}
+    }
+    
+    // Essayer Supabase
+    if(supabaseClient) {
+        supabaseClient.auth.getUser().then(({ data }) => {
+            if(data?.user) {
+                supabaseClient.from('admin_users').select('*').eq('user_id', data.user.id).single().then(({ data: adminData }) => {
+                    if(adminData) {
+                        adminUser = { id: data.user.id, email: data.user.email, fullName: adminData.full_name, role: adminData.role };
+                        onAdminLoginSuccess();
+                    }
+                });
+            }
+        }).catch(() => {});
+    }
+}
+
+// ============================================
+// INIT
+// ============================================
+function init() {
+    initSupabase();
+    loadAllData();
+    restoreAdminSession();
+    localStorage.setItem('cockpit_session', JSON.stringify({ email: 'adminglobal123@mail.com', role: 'super_admin' }));
+}
+
+document.addEventListener('click', function(e) {
+    if(e.target.classList.contains('modal-overlay')) e.target.classList.remove('active');
+});
+
+init();
+</script>
+</body>
+</html>
